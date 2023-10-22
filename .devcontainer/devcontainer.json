@@ -1,0 +1,23 @@
+// Dev Container metadata reference (https://containers.dev/implementors/json_reference)
+{
+	"name": "Google Apps Script",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"remoteUser": "root",
+	"shutdownAction" : "stopContainer",
+	"mounts": [
+		"source=google-apps-script-bashhistory,target=/commandhistory,type=volume"
+	],
+	"workspaceMount": "source=${localWorkspaceFolder},target=/root/workspace,type=bind",
+	"workspaceFolder": "/root/workspace",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"dbaeumer.vscode-eslint",
+				"ms-azuretools.vscode-docker",
+				"chouzz.vscode-better-align"
+			]
+		}
+	}
+}
