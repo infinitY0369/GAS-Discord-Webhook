@@ -28,6 +28,7 @@ RUN npm install -g \
     eslint-plugin-n \
     eslint-plugin-promise \
     fast-xml-parser \
+    node-html-parser \
     typescript
 
 # Update globally installed npm packages
