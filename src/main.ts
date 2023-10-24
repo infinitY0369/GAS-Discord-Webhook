@@ -1,10 +1,12 @@
 import { parseFeedContent } from "./feed"
-import { getSheetByName, createSheetByName } from "./util"
+import { getSheetByName, createSheetByName, strToSHA256 } from "./util"
 import { postToDiscord } from "./webhook"
+import { test } from "./test"
 
-declare const global: { main: () => void }
+declare const global: { main: () => void; test: () => void }
 // Functions or variables placed at the top level.
 global.main = main
+global.test = test
 
 function main(): void {
     const sheet: { [key: string]: GoogleAppsScript.Spreadsheet.Sheet | null } = {}
@@ -26,25 +28,37 @@ function main(): void {
     }
 
     sheet.articles = getSheetByName("articles") ?? createSheetByName("articles")
+    let articleData = sheet.articles.getRange(1, 1, sheet.articles.getDataRange().getLastRow(), 1).getValues()
 
     const values = sheet.feed.getRange(2, 1, sheet.feed.getDataRange().getLastRow() - 1, 4).getValues()
 
+    let updateArticle: boolean = true
+
     for (const value of values) {
+        if (value[idx.username].length < 0 || value[idx.avatar_url].length < 0 || value[idx.url].length < 0 || value[idx.webhook].length < 0) {
+            continue
+        }
+
         for (const entry of parseFeedContent(value[idx.url])) {
-            const articleData = sheet.articles.getRange(1, 1, sheet.articles.getDataRange().getLastRow(), 4).getValues()
+            articleData = updateArticle ? sheet.articles.getRange(1, 1, sheet.articles.getDataRange().getLastRow(), 1).getValues() : articleData
+
+            updateArticle = false
+
+            const content = `### **${entry.title}**\n\n${entry.link}`
 
             const updated = Utilities.formatDate(new Date(entry.updated), "JST", "yyyy-MM-dd'T'HH:mm:ssXXX")
 
-            if (articleData.some((data) => data[0] === value[idx.webhook] && data[1] === entry.title && data[2] === entry.link && data[3] === updated)) {
+            const hash = strToSHA256(content + updated)
+
+            if (articleData.some((data) => data[0] === hash)) {
                 continue
             }
-
-            const content = "**" + entry.author + " | " + entry.title + "**" + "\n\n" + entry.link
 
             const result = postToDiscord(content, value[idx.username], value[idx.avatar_url], value[idx.webhook])
 
             if (result) {
-                sheet.articles.appendRow([value[idx.webhook], entry.title, entry.link, updated])
+                sheet.articles.appendRow([hash])
+                updateArticle = true
             }
         }
     }
