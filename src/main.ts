@@ -1,9 +1,10 @@
 import { parseFeedContent } from "./feed"
-import { getSheetByName, createSheetByName, strToSHA256 } from "./util"
+import { getSheetByName, createSheetByName, getLastRowIndex, getLastColumnIndex, strToSHA256 } from "./util"
 import { postToDiscord } from "./webhook"
 import { test } from "./test"
 
 declare const global: { main: () => void; test: () => void }
+
 // Functions or variables placed at the top level.
 global.main = main
 global.test = test
@@ -11,6 +12,7 @@ global.test = test
 function main(): void {
     const sheet: { [key: string]: GoogleAppsScript.Spreadsheet.Sheet | null } = {}
 
+    // Get the "feed" sheet.
     sheet.feed = getSheetByName("feed")
 
     if (!sheet.feed) {
@@ -18,48 +20,80 @@ function main(): void {
         return
     }
 
-    const headers = sheet.feed.getRange(1, 1, 1, sheet.feed.getLastColumn()).getValues()[0]
+    // Get the header row of the "feed" sheet.
+    const feedHeader = sheet.feed.getRange(1, 1, 1, getLastColumnIndex(1, sheet.feed)).getValues()[0]
 
-    const idx = {
-        username: headers.indexOf("NAME"),
-        avatar_url: headers.indexOf("ICON"),
-        url: headers.indexOf("URL"),
-        webhook: headers.indexOf("WEBHOOK")
+    if (!feedHeader) {
+        throw new Error("Failed to get header of feed sheet.")
     }
 
+    const idx = {
+        username: feedHeader.indexOf("NAME"),
+        avatar_url: feedHeader.indexOf("ICON"),
+        url: feedHeader.indexOf("URL"),
+        max: feedHeader.indexOf("MAX"),
+        webhook: feedHeader.indexOf("WEBHOOK")
+    }
+
+    // Get the "articles" sheet or create it if it doesn't exist.
     sheet.articles = getSheetByName("articles") ?? createSheetByName("articles")
-    let articleData = sheet.articles.getRange(1, 1, sheet.articles.getDataRange().getLastRow(), 1).getValues()
 
-    const values = sheet.feed.getRange(2, 1, sheet.feed.getDataRange().getLastRow() - 1, 4).getValues()
+    const feedData = sheet.feed.getRange(2, 1, sheet.feed.getLastRow() - 1, getLastColumnIndex(1, sheet.feed)).getValues()
 
-    let updateArticle: boolean = true
-
-    for (const value of values) {
-        if (value[idx.username].length < 0 || value[idx.avatar_url].length < 0 || value[idx.url].length < 0 || value[idx.webhook].length < 0) {
+    for (const data of feedData) {
+        if (!data[idx.username] || !data[idx.avatar_url] || !data[idx.url] || !data[idx.webhook]) {
             continue
         }
 
-        for (const entry of parseFeedContent(value[idx.url])) {
-            articleData = updateArticle ? sheet.articles.getRange(1, 1, sheet.articles.getDataRange().getLastRow(), 1).getValues() : articleData
+        let init: boolean = false
 
-            updateArticle = false
+        const webhookHash = strToSHA256(data[idx.url] + data[idx.webhook])
 
-            const content = `### **${entry.title}**\n\n${entry.link}`
+        const headerColumnIndex = getLastColumnIndex(1, sheet.articles)
 
-            const updated = Utilities.formatDate(new Date(entry.updated), "JST", "yyyy-MM-dd'T'HH:mm:ssXXX")
+        const articlesHeader = headerColumnIndex === 0 ? [] : sheet.articles.getRange(1, 1, 1, headerColumnIndex).getValues()[0]
 
-            const hash = strToSHA256(content + updated)
+        let headerIndex = articlesHeader.indexOf(webhookHash) + 1
 
-            if (articleData.some((data) => data[0] === hash)) {
+        if (headerIndex === 0) {
+            const newIndex: number = getLastColumnIndex(1, sheet.articles) + 1
+            sheet.articles.getRange(1, newIndex).setValue(webhookHash)
+            headerIndex = newIndex
+            init = true
+        }
+
+        const rowIndex = getLastRowIndex(headerIndex, sheet.articles) - 1
+
+        let articlesData = rowIndex === 0 ? [] : sheet.articles.getRange(2, headerIndex, rowIndex, 1).getValues()
+
+        for (const entry of parseFeedContent(data[idx.url])) {
+            const contentHash = strToSHA256(entry.title + entry.link + entry.author + entry.updated)
+
+            if (articlesData.some((articles) => articles[0] === contentHash)) {
                 continue
             }
 
-            const result = postToDiscord(content, value[idx.username], value[idx.avatar_url], value[idx.webhook])
+            const content = `**${entry.title.replace(/\n/, "**\n**")}**\n\n${entry.link}`
 
-            if (result) {
-                sheet.articles.appendRow([hash])
-                updateArticle = true
+            const result = !init ? postToDiscord(content, data[idx.username], data[idx.avatar_url], data[idx.webhook]) : false
+
+            if (result || init) {
+                articlesData.push([contentHash])
             }
         }
+
+        sheet.articles.getRange(2, headerIndex, articlesData.length, 1).clear()
+
+        const max: number = Number(data[idx.max])
+        if (max && max > 0 && articlesData.length > max) {
+            articlesData = articlesData.slice(articlesData.length - max, articlesData.length)
+        }
+
+        if (articlesData.length < 0) {
+            Logger.log("The number of rows in the range must be at least 1.")
+            continue
+        }
+
+        sheet.articles.getRange(2, headerIndex, articlesData.length, 1).setValues(articlesData)
     }
 }

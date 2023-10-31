@@ -6,6 +6,38 @@ export function createSheetByName(name: string) {
     return SpreadsheetApp.getActiveSpreadsheet().insertSheet(name)
 }
 
+export function getLastRowIndex(column: number, sheet: GoogleAppsScript.Spreadsheet.Sheet) {
+    const maxRowNum = sheet.getMaxRows()
+    const range = sheet.getRange(maxRowNum, column)
+    if (range.getValue()) {
+        return maxRowNum
+    }
+
+    const rowIndex = range.getNextDataCell(SpreadsheetApp.Direction.UP).getRow()
+
+    if (sheet.getRange(rowIndex, column).getValue()) {
+        return rowIndex
+    }
+
+    return 0
+}
+
+export function getLastColumnIndex(row: number, sheet: GoogleAppsScript.Spreadsheet.Sheet) {
+    const maxColumnNum = sheet.getMaxColumns()
+    const range = sheet.getRange(row, maxColumnNum)
+    if (range.getValue()) {
+        return maxColumnNum
+    }
+
+    const columnIndex = range.getNextDataCell(SpreadsheetApp.Direction.PREVIOUS).getColumn()
+
+    if (sheet.getRange(row, columnIndex).getValue()) {
+        return columnIndex
+    }
+
+    return 0
+}
+
 export function strToSHA256(input: string): string {
     const rawHashNum = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, input, Utilities.Charset.UTF_8)
 
