@@ -3,11 +3,21 @@ import { parse } from "node-html-parser"
 
 export function* parseFeedContent(url: string) {
     const reg = {
+        discordstatus: {
+            history: {
+                atom: /https:\/\/discordstatus\.com\/history\.atom/,
+                rss: /https:\/\/discordstatus\.com\/history\.rss/
+            }
+        },
         github: {
-            commits: /https:\/\/github.com\/.*\/.*\/commits\/.*\.atom/
+            commits: /https:\/\/github\.com\/.*\/.*\/commits\/.*\.atom/,
+            releases: /https:\/\/github\.com\/.*\/.*\/releases\.atom/
         },
         monsterhunter: {
-            news: /https:\/\/www.monsterhunter.com\/j?a?\/?news\/?/
+            news: /https:\/\/www\.monsterhunter\.com\/(ja\/)?news\/?/
+        },
+        youtube: {
+            channel_id: /https:\/\/www\.youtube\.com\/feeds\/videos\.xml\?channel_id=UC[\w|-]{22}/
         }
     }
 
@@ -26,9 +36,32 @@ export function* parseFeedContent(url: string) {
     const parser = new XMLParser(parserOptions)
 
     switch (true) {
+        case reg.discordstatus.history.atom.test(url): {
+            const jobj = parser.parse(xml)
+            for (const entry of jobj.feed.entry.reverse()) {
+                yield {
+                    title: entry.title,
+                    link: entry.link["@_href"],
+                    author: null,
+                    updated: entry.updated
+                }
+            }
+            break
+        }
+        case reg.discordstatus.history.rss.test(url): {
+            const jobj = parser.parse(xml)
+            for (const item of jobj.rss.channel.item.reverse()) {
+                yield {
+                    title: item.title,
+                    link: item.link,
+                    author: null,
+                    updated: item.pubDate
+                }
+            }
+            break
+        }
         case reg.github.commits.test(url): {
             const jobj = parser.parse(xml)
-
             for (const entry of jobj.feed.entry.reverse()) {
                 yield {
                     title: entry.title,
@@ -39,15 +72,38 @@ export function* parseFeedContent(url: string) {
             }
             break
         }
+        case reg.github.releases.test(url): {
+            const jobj = parser.parse(xml)
+            for (const entry of jobj.feed.entry.reverse()) {
+                yield {
+                    title: entry.title,
+                    link: entry.link["@_href"],
+                    author: entry.author.name,
+                    updated: entry.updated
+                }
+            }
+            break
+        }
         case reg.monsterhunter.news.test(url): {
             const jobj = parse(xml)
-
             for (const item of jobj.querySelectorAll("#latest > div > ul > a").reverse()) {
                 yield {
                     title: item.querySelector("li > figure > figcaption > div.text")?.innerText.trim(),
                     link: item.getAttribute("href"),
-                    author: item.querySelector("li > figure > figcaption > div.info > div.category")?.innerText,
+                    author: null,
                     updated: item.querySelector("li > figure > figcaption > div.info > div.date")?.innerText.trim()
+                }
+            }
+            break
+        }
+        case reg.youtube.channel_id.test(url): {
+            const jobj = parser.parse(xml)
+            for (const entry of jobj.feed.entry.reverse()) {
+                yield {
+                    title: entry.title,
+                    link: entry.link["@_href"],
+                    author: entry.author.name,
+                    updated: entry.updated
                 }
             }
             break
