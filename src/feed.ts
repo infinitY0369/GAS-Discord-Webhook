@@ -1,5 +1,6 @@
 import { XMLParser } from "fast-xml-parser"
 import { parse } from "node-html-parser"
+import { decode } from "html-entities"
 
 export function* parseFeedContent(url: string) {
     const reg = {

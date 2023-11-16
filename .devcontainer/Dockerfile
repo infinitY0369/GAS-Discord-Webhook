@@ -28,6 +28,7 @@ RUN npm install -g \
     eslint-plugin-n \
     eslint-plugin-promise \
     fast-xml-parser \
+    html-entities \
     node-html-parser \
     typescript
 
