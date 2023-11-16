@@ -14,6 +14,11 @@ export function* parseFeedContent(url: string) {
             commits: /https:\/\/github\.com\/.*\/.*\/commits\/.*\.atom/,
             releases: /https:\/\/github\.com\/.*\/.*\/releases\.atom/
         },
+        microsoft: {
+            devblogs: {
+                visualstudio: /https:\/\/devblogs\.microsoft\.com\/visualstudio\/feed\/?/
+            }
+        },
         monsterhunter: {
             news: /https:\/\/www\.monsterhunter\.com\/(ja\/)?news\/?/
         },
@@ -81,6 +86,18 @@ export function* parseFeedContent(url: string) {
                     link: entry.link["@_href"],
                     author: entry.author.name,
                     updated: entry.updated
+                }
+            }
+            break
+        }
+        case reg.microsoft.devblogs.visualstudio.test(url): {
+            const jobj = parser.parse(xml)
+            for (const item of jobj.rss.channel.item.reverse()) {
+                yield {
+                    title: decode(item.title),
+                    link: item.guid["#text"],
+                    author: item["dc:creator"],
+                    updated: item.pubDate
                 }
             }
             break
